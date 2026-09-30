@@ -6,10 +6,8 @@ The repository includes:
 
 - a React/Vite frontend
 - a FastAPI backend
-- a PDF comparison tool
-- a reviewer workflow that turns candidate filing changes into draft impact assessments
-
-The prepared demo uses three CPUC filings and a synthetic company project. Human review is still required; reviewer output is a draft.
+- a PDF comparison workflow
+- a reviewer agent that turns candidate filing changes into draft impact assessments
 
 The current implemented scope is described in `PRD_v4.md` and `TDD_v3.md`.
 
