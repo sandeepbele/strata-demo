@@ -61,6 +61,7 @@ class Token:
 
 
 def normalize(text: str) -> str:
+    # Align on normalized keys while retaining each token's original source text.
     return (unicodedata.normalize("NFKC", text).casefold()
             .replace("’", "'").replace("–", "-").replace("—", "-")
             .replace("\uf0b7", "•"))
@@ -138,6 +139,7 @@ def unique_anchor_pairs(old: list[str], new: list[str], width: int = 8) -> list[
     """Match unique token shingles, then keep their longest ordered chain."""
     if min(len(old), len(new)) < width:
         return []
+    # Only runs unique in each PDF become anchors; repeated boilerplate is ambiguous.
     old_runs = [tuple(old[i:i + width]) for i in range(len(old) - width + 1)]
     new_runs = [tuple(new[i:i + width]) for i in range(len(new) - width + 1)]
     old_counts = Counter(old_runs)
@@ -151,7 +153,8 @@ def unique_anchor_pairs(old: list[str], new: list[str], width: int = 8) -> list[
     if not candidates:
         return []
 
-    # Longest increasing subsequence in the newer document's offsets.
+    # Keep anchors in both documents' reading order; inserted pages may shift
+    # their absolute offsets. Tails and predecessors reconstruct that chain.
     tails: list[int] = []
     tail_indexes: list[int] = []
     previous = [-1] * len(candidates)
@@ -197,6 +200,7 @@ def equal_blocks(old: list[str], new: list[str], width: int = 8) -> list[tuple[i
     for old_pos, new_pos in anchors:
         if blocks:
             prev_old, prev_new, size = blocks[-1]
+            # Overlapping anchors with the same offset describe one unchanged run.
             if new_pos - old_pos == prev_new - prev_old and old_pos <= prev_old + size:
                 blocks[-1] = (prev_old, prev_new, max(size, old_pos + width - prev_old))
                 continue
@@ -209,6 +213,7 @@ def raw_changes(old: list[str], new: list[str], max_window: int = 1800) -> list[
     blocks = equal_blocks(old, new)
     changes: list[tuple[int, int, int, int, bool]] = []
     old_cursor = new_cursor = 0
+    # Diff only the gaps between matched runs, then include the trailing gap.
     for old_start, new_start, size in [*blocks, (len(old), len(new), 0)]:
         if old_start > old_cursor or new_start > new_cursor:
             old_gap = old[old_cursor:old_start]
@@ -217,6 +222,7 @@ def raw_changes(old: list[str], new: list[str], max_window: int = 1800) -> list[
             if max(len(old_gap), len(new_gap)) > max_window:
                 changes.append((old_cursor, old_start, new_cursor, new_start, True))
             else:
+                # SequenceMatcher refines only this bounded local gap.
                 matcher = SequenceMatcher(None, old_gap, new_gap, autojunk=False)
                 for tag, a0, a1, b0, b1 in matcher.get_opcodes():
                     if tag != "equal":
@@ -229,17 +235,17 @@ def raw_changes(old: list[str], new: list[str], max_window: int = 1800) -> list[
 def group_changes(
     changes: list[tuple[int, int, int, int, bool]], max_between: int = 10,
 ) -> list[tuple[int, int, int, int, bool]]:
-    """Group adjacent edits so one revised sentence is one review item."""
+    """Group edits separated by at most a short token gap on both sides."""
     grouped: list[tuple[int, int, int, int, bool]] = []
     for item in changes:
         if grouped:
             a0, a1, b0, b1, coarse = grouped[-1]
             c0, c1, d0, d1, next_coarse = item
             old_between, new_between = c0 - a1, d0 - b1
+            # Merge nearby token edits on both sides; page boundaries are not checked.
             if (not coarse and not next_coarse and
                     0 <= old_between <= max_between and
                     0 <= new_between <= max_between and
-                    # Avoid grouping across unrelated pages or long sections.
                     max(old_between, new_between) <= max_between):
                 grouped[-1] = (a0, c1, b0, d1, False)
                 continue
@@ -286,6 +292,7 @@ def source_span(tokens: list[Token], start: int, end: int, context: int = 24) ->
 
 
 def score_change(old_tokens: list[Token], new_tokens: list[Token], coarse: bool) -> tuple[int, list[str]]:
+    # Coarse spans remain available but get no fine-grained ranking signals.
     if coarse:
         return 0, ["coarse_alignment"]
     old_keys = [t.key for t in old_tokens]
@@ -310,10 +317,12 @@ def score_change(old_tokens: list[Token], new_tokens: list[Token], coarse: bool)
 
 
 def compare_tokens(old: list[Token], new: list[Token]) -> list[dict]:
+    # Align normalized keys, then map each changed range back to original text.
     old_keys = [token.key for token in old]
     new_keys = [token.key for token in new]
     ranges = group_changes(raw_changes(old_keys, new_keys))
     findings = []
+    # IDs follow source order within this comparison, not across PDF versions.
     for index, (a0, a1, b0, b1, coarse) in enumerate(ranges, 1):
         # Priority only orders human review; every candidate remains in the corpus.
         score, reasons = score_change(old[a0:a1], new[b0:b1], coarse)

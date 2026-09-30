@@ -136,6 +136,7 @@ class ReviewContext:
 
 
 def _tokens(value: str) -> set[str]:
+    # Unique normalized terms: repeated words do not increase a match score.
     return {match.group().casefold() for match in WORD_RE.finditer(value)
             if (len(match.group()) > 2 or match.group().isdigit()) and match.group().casefold() not in STOPWORDS}
 
@@ -152,6 +153,7 @@ def search_changes(data: ReviewContext, query: str, limit: int = 8, *, context_t
     if not 1 <= limit <= 20:
         raise ValueError("limit must be between 1 and 20")
     records = []
+    # Score every change; ingest priority never removes candidates from search.
     for change in data.changes["changes"]:
         sides = [change.get("old") or {}, change.get("new") or {}]
         changed = " ".join(side.get("text", "") for side in sides)
@@ -163,23 +165,26 @@ def search_changes(data: ReviewContext, query: str, limit: int = 8, *, context_t
         terms = _tokens(text)
         if not terms:
             return terms, []
+        # Document frequency counts candidate changes containing a term on either side.
         document_frequency = {term: sum(term in changed or term in context for _, _, _, changed, context in records)
                               for term in terms}
         ranked = []
         for change, changed, context, changed_terms, context_terms in records:
-            # IDF plus length normalization stops a large coarse span from
-            # outranking a focused provision merely because it has many words.
+            # This is an IDF-like lexical heuristic, not BM25 or semantic search.
+            # Length penalties keep a large span from winning just for containing more terms.
             changed_length = max(1, len(WORD_RE.findall(changed)))
             context_length = max(1, len(WORD_RE.findall(context)))
             score = 0.0
             for term in terms:
                 rarity = math.log(1 + (n - document_frequency[term] + 0.5) / (document_frequency[term] + 0.5))
+                # Directly changed text weighs more than nearby unchanged context.
                 if term in changed_terms:
                     score += rarity * 3 / (1 + changed_length / 180)
                 elif term in context_terms:
                     score += rarity * 0.6 / (1 + context_length / 80)
             if score:
                 ranked.append((score, change))
+        # The ID breaks ties reproducibly; score is retrieval order, not impact.
         ranked.sort(key=lambda pair: (-pair[0], pair[1]["id"]))
         return terms, ranked
 
@@ -201,6 +206,7 @@ def search_changes(data: ReviewContext, query: str, limit: int = 8, *, context_t
                     break
         if len(selected) == limit:
             break
+    # Each score belongs to its matching route; interleaving does not compare route scores.
     return [{
         "change_id": change["id"], "retrieval_score": score,
         "match_route": route, "route_rank": route_rank,
