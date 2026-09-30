@@ -45,6 +45,7 @@ def _write(project_id: str, state: dict) -> None:
 
 
 def _default(project_id: str, context: ReviewContext | None, obligation_count: int) -> dict:
+    # The first prepared pair supplies the starting PDF; no diff is loaded yet.
     comparison = next((item for item in context.manifest["comparisons"] if not item.get("legacy_direct")), None) if context else None
     return {
         "project_id": project_id,
@@ -62,6 +63,7 @@ def _default(project_id: str, context: ReviewContext | None, obligation_count: i
 def _snapshot(state: dict, context: ReviewContext | None, trigger: str,
               obligation_ids: list[str] | None = None) -> dict:
     comparison = context.comparison if context else None
+    # History records the pair and results, not a copy of the change corpus.
     return {
         "run_id": state["review"].get("run_id"),
         "trigger": trigger,
@@ -113,6 +115,7 @@ def get_state(project_id: str, context: ReviewContext | None, obligation_count: 
 
 def _run(project_id: str, run_id: str, context: ReviewContext, obligations: list,
          key: str, model_name: str) -> None:
+    # The comparison JSON is already loaded in context before this worker starts.
     try:
         with _lock:
             if _active.get(project_id) != run_id:
@@ -212,7 +215,9 @@ def _backfill_context(project_id: str, context: ReviewContext | None,
     # Compare the first visible version with the current one so a newly added
     # obligation sees earlier changes in this filing's lineage.
     first = lineage[0]
+    # Use an existing pair entry, or compute and save a direct comparison.
     ensure_backfill_comparison(context.docket_dir, first, current)
+    # The reviewer reads candidates from the selected comparison JSON.
     return ReviewContext.load(ROOT / "data" / "seed" / "projects" / project_id, context.docket_dir, first, current)
 
 
@@ -261,6 +266,8 @@ def decide(project_id: str, context: ReviewContext, obligation_count: int,
 def introduce(project_id: str, context: ReviewContext, obligations: list) -> dict:
     with _lock:
         state = get_state(project_id, context, len(obligations))
+        # These manifest entries define the demo sequence; their JSON files may
+        # not exist until a version is introduced.
         steps = [item for item in context.manifest["comparisons"]
                  if not item.get("legacy_direct") and not item.get("manual_upload")
                  and not item.get("backfill")]
@@ -276,16 +283,22 @@ def introduce(project_id: str, context: ReviewContext, obligations: list) -> dic
             if latest.get("obligation_ids"):
                 obligations = [item for item in obligations if item.id in latest["obligation_ids"]]
         else:
+            # Advance only to the next pair whose old version is already visible.
             comparison = next((item for item in steps if item["old"] in state["visible_versions"]
                                and item["new"] not in state["visible_versions"]), None)
             trigger = "new_version"
         if comparison is None:
             return state
         if not comparison.get("manual_upload") and not comparison.get("backfill"):
+            # First introduction recomputes into data/local/uploads/<docket-id>/;
+            # retry reuses that JSON unless it has gone missing.
             ensure_prepared_comparison(context.docket_dir, comparison["old"], comparison["new"],
                                        generate=trigger == "new_version")
+        # ReviewContext.load follows the merged manifest's 'changes' path to
+        # read the saved JSON and check its old/new hashes against the manifest.
         context = ReviewContext.load(ROOT / "data" / "seed" / "projects" / project_id, context.docket_dir,
                                      comparison["old"], comparison["new"])
+        # Save the visible version and review run before starting the model worker.
         state, launch = _begin_locked(project_id, state, context, obligations, trigger)
     if launch:
         Thread(target=_run, args=launch, daemon=True).start()
@@ -325,6 +338,7 @@ def add_uploaded_document(project_id: str, context: ReviewContext, obligations: 
         if state["review"]["status"] == "reviewing":
             raise ValueError("Wait for the current review to finish")
         if revises is None:
+            # An independent filing has no old version, so there is no diff to review.
             version = add_filing(context.docket_dir, title, issued_on, status, original_filename, pdf_bytes)
             state["visible_version"] = version
             state["visible_versions"].append(version)
@@ -332,6 +346,8 @@ def add_uploaded_document(project_id: str, context: ReviewContext, obligations: 
             return version, state
         if revises not in state["visible_versions"]:
             raise ValueError("The filing being revised is not visible in this project")
+        # add_revision writes the PDF and pair JSON under data/local/uploads/
+        # before publishing the manifest entry; load that JSON for review.
         version = add_revision(context.docket_dir, revises, title, issued_on, status, original_filename, pdf_bytes)
         context = ReviewContext.load(ROOT / "data" / "seed" / "projects" / project_id, context.docket_dir,
                                      revises, version)
