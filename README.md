@@ -1,4 +1,4 @@
-# Strata local review workspace
+# Strata
 
 Strata is a local prototype for reviewing how changes in regulatory filings may affect a company's internal obligations.
 
