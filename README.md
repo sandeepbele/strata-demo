@@ -83,9 +83,7 @@ Vite proxies `/api` requests to the local FastAPI server.
 
 ## 3. Run the prepared demo
 
-For a quick exploration, the prototype comes with a prepared demo project, `precanned_demo_resource_procurement`, with synthetic obligations and three filings from CPUC docket `R.25-06-019`. The [fixture sources and hashes](data/seed/fixtures/cpuc/README.md) identify the bundled PDFs.
-
-The demo docket contains:
+For a quick exploration, the prototype comes with a prepared demo project, `precanned_demo_resource_procurement`, with synthetic obligations and three filings from California Public Utility Commition's docket `R.25-06-019`.
 
 - `v1` — January 14, 2026 proposal
 - `v1a` — February 24, 2026 revised proposal
@@ -99,12 +97,12 @@ The demo docket contains:
 3. Open the **Docket**. Initially only `v1` is visible.
 4. Click **Introduce new version** to reveal `v1a`.
 5. Strata compares `v1` with `v1a` and starts one background review per obligation.
-6. Return to **Obligations** or use the Reviews rail to watch review status and flagged-obligation counts. Review takes few seconds per obligation. It updates review status on UI.
+6. Return to **Obligations** or use the Reviews rail to watch review status and flagged-obligation counts. **Review takes few seconds per obligation. It updates review status on UI.**
 7. On a flagged obligation, click on "Review findings".
 8. On right side drawer, review the draft impact assessment with:
    - cited filing changes
    - the draft finding
-   - collapsed reasoning
+   - reasoning (collapsed by default)
    - proposed actions
    - open questions
 9. Open a citation to see the extracted source page, highlighted changed lines, and the corresponding text from the other version.
@@ -217,6 +215,7 @@ The tests cover retrieval cases, citations, reviewer tool use, and workflow beha
 
 This prototype intentionally keeps several boundaries visible:
 
+- Assumes obligation list is curated and available. Ideally obligations should be extracted from project documents.
 - reviewer output requires human review
 - retrieval is lexical and can miss relevant changes when terminology differs
 - PDF extraction can produce reading-order errors, especially around tables and footnotes
