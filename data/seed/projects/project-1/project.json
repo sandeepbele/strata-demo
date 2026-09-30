@@ -1,0 +1,8 @@
+{
+  "id": "project-1",
+  "organization": "Redwood Valley Energy",
+  "name": "precanned_demo_resource_procurement",
+  "kind": "synthetic_demo",
+  "dockets": ["R.25-06-019"],
+  "obligations_file": "obligations.md"
+}

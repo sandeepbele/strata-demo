@@ -1,0 +1,41 @@
+{
+  "docket_id": "R.25-06-019",
+  "agency": "California Public Utilities Commission",
+  "title": "Integrated resource planning procurement",
+  "versions": {
+    "v1": {
+      "file": "v1/document.pdf",
+      "original_filename": "595083681.PDF",
+      "filing_id": "filing-1",
+      "status": "proposed",
+      "date": "2026-01-14",
+      "source_url": "https://docs.cpuc.ca.gov/PublishedDocs/Efile/G000/M595/K083/595083681.PDF",
+      "sha256": "2c91fc0fc3809d8ea73d56be40741cfaf29bb9fb3a624fc9ea3f0ddfcf92a194"
+    },
+    "v1a": {
+      "file": "v1a/document.pdf",
+      "original_filename": "600398976.PDF",
+      "filing_id": "filing-1",
+      "status": "proposed",
+      "date": "2026-02-24",
+      "title": "Proposed Decision (Rev.1)",
+      "source_url": "https://docs.cpuc.ca.gov/PublishedDocs/Published/G000/M600/K398/600398976.PDF",
+      "sha256": "abd04e2038a23596e1a964a4ee14bfaf08542c2a3fffb0447a806e8788e32ed2"
+    },
+    "v2": {
+      "file": "v2/document.pdf",
+      "original_filename": "601777006.PDF",
+      "filing_id": "filing-1",
+      "status": "final",
+      "date": "2026-03-05",
+      "decision": "D.26-02-057",
+      "source_url": "https://docs.cpuc.ca.gov/PublishedDocs/Published/G000/M601/K777/601777006.PDF",
+      "sha256": "bce4f8cc07a8aa9a4ebeaed512ffa414b4f3e6370561822ce7b30330b3be1e82"
+    }
+  },
+  "comparisons": [
+    {"old": "v1", "new": "v1a", "changes": "changes/v1-v1a.json"},
+    {"old": "v1a", "new": "v2", "changes": "changes/v1a-v2.json"},
+    {"old": "v1", "new": "v2", "changes": "changes/v1-v2.json", "legacy_direct": true}
+  ]
+}

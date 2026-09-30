@@ -1,0 +1,8 @@
+{
+  "id": "project-2",
+  "organization": "Redwood Valley Energy",
+  "name": "Field Operations Safety",
+  "kind": "synthetic_demo",
+  "dockets": ["field-operations-safety"],
+  "obligations_file": "obligations.md"
+}
