@@ -213,6 +213,7 @@ def raw_changes(old: list[str], new: list[str], max_window: int = 1800) -> list[
         if old_start > old_cursor or new_start > new_cursor:
             old_gap = old[old_cursor:old_start]
             new_gap = new[new_cursor:new_start]
+            # Large unmatched regions stay coarse instead of claiming precise alignment.
             if max(len(old_gap), len(new_gap)) > max_window:
                 changes.append((old_cursor, old_start, new_cursor, new_start, True))
             else:
@@ -272,6 +273,7 @@ def source_span(tokens: list[Token], start: int, end: int, context: int = 24) ->
             locations.append({"page": token.page, "line": token.line,
                               "top": round(token.top, 1), "bottom": round(token.bottom, 1)})
             last_page, last_line = token.page, token.line
+    # Coordinates belong to this PDF version; the token range identifies the diff span.
     return {
         "token_start": start,
         "token_end": end,
@@ -313,6 +315,7 @@ def compare_tokens(old: list[Token], new: list[Token]) -> list[dict]:
     ranges = group_changes(raw_changes(old_keys, new_keys))
     findings = []
     for index, (a0, a1, b0, b1, coarse) in enumerate(ranges, 1):
+        # Priority only orders human review; every candidate remains in the corpus.
         score, reasons = score_change(old[a0:a1], new[b0:b1], coarse)
         kind = "modified" if a0 < a1 and b0 < b1 else "deleted" if a0 < a1 else "added"
         findings.append({

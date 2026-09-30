@@ -108,6 +108,7 @@ class ReviewContext:
             raise ValueError("Source comparison not found")
         changes = {"changes": []}
         if comparison:
+            # A missing prepared corpus can be rebuilt; its source hashes must still match.
             if (not docket_file(docket_dir, comparison["changes"]).is_file()
                     and not comparison.get("manual_upload") and not comparison.get("backfill")):
                 ensure_prepared_comparison(docket_dir, comparison["old"], comparison["new"])
@@ -187,6 +188,7 @@ def search_changes(data: ReviewContext, query: str, limit: int = 8, *, context_t
     selected: list[tuple[float, dict, set[str], str, int]] = []
     seen: set[str] = set()
     for index in range(max(len(query_ranked), len(context_ranked))):
+        # Alternate routes so obligation wording can surface a candidate the query missed.
         for route, terms, ranked in (("query", query_terms, query_ranked),
                                      ("obligation_context", context_terms, context_ranked)):
             if index >= len(ranked):
@@ -267,6 +269,7 @@ def validate_assessment(assessment: ImpactAssessment, data: ReviewContext, oblig
     if assessment.project_id != data.project["id"] or assessment.obligation_id != obligation.id:
         raise ValueError("Assessment project or obligation ID does not match input")
     new_status = data.manifest["versions"][data.comparison["new"]].get("status")
+    # Nonfinal sources may prompt review; proposed_action cannot direct a record edit.
     if new_status != "final":
         if assessment.outcome == "affected":
             raise ValueError("A nonfinal source can flag a possible impact for review, not an affected obligation")
@@ -297,6 +300,7 @@ def serialize_assessment(assessment: ImpactAssessment, data: ReviewContext) -> d
     result = assessment.model_dump()
     result["review_policy_version"] = 1
     for citation in result["citations"]:
+        # The model selects an ID and side; source text and identity come from the corpus.
         version, meta = data.source_version(citation["side"])
         span = data.by_id[citation["change_id"]].get(citation["side"]) or {}
         citation.update({
@@ -366,6 +370,7 @@ def build_agent(model: OpenRouterModel) -> Agent[ReviewContext, ImpactAssessment
                        call.args_as_dict().get("side") == citation.side for call in calls):
                 missing.append(f"read_source_window_tool({citation.change_id}, {citation.side})")
         if missing:
+            # One retry message lists all missing inspections for a focused repair.
             raise ModelRetry("Inspect cited evidence before finalizing, or remove unsupported citations: " +
                              ", ".join(dict.fromkeys(missing)))
         return output

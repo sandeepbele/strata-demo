@@ -52,6 +52,7 @@ def _context(project_id: str, old: str | None = None, new: str | None = None) ->
     if "/" in docket_id or docket_id in (".", ".."):
         raise HTTPException(400, "Invalid docket link")
     try:
+        # Metadata reads need the version list, but no PDF comparison corpus.
         return ReviewContext.load(project_dir, DOCKETS / docket_id, old, new,
                                   metadata_only=old is None)
     except (FileNotFoundError, ValueError, KeyError) as exc:
@@ -160,6 +161,7 @@ async def add_docket_filing(
         if len(body) > MAX_PDF_BYTES:
             raise HTTPException(413, "PDF exceeds the 25 MB limit")
     try:
+        # PDF extraction and token comparison are synchronous, so run them off the event loop.
         version, updated = await run_in_threadpool(
             workflow.add_uploaded_document, project_id, context, _obligations(project_dir, project),
             revises, title, issued_on, status, original_filename, bytes(body),
@@ -207,6 +209,7 @@ def _selected_context(project_id: str, old: str | None, new: str | None) -> Revi
     state = workflow.get_state(project_id, data, 0)
     latest = state["runs"][-1] if state["runs"] else None
     pair = latest.get("comparison") if latest else None
+    # Without an explicit pair, show the latest saved review's source comparison.
     return _context(project_id, pair["old"], pair["new"]) if pair else data
 
 

@@ -23,6 +23,7 @@ from backend.storage import WORKFLOWS
 
 DATA = WORKFLOWS
 _lock = Lock()
+# Active workers live only in this process; saved runs live in project JSON.
 _active: dict[str, str] = {}
 
 
@@ -39,6 +40,7 @@ def _write(project_id: str, state: dict) -> None:
     destination = _path(project_id)
     temporary = destination.with_name(f"{destination.name}.{uuid4()}.tmp")
     temporary.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    # Replace the complete JSON file so readers never see a partial write.
     os.replace(temporary, destination)
 
 
@@ -101,6 +103,7 @@ def get_state(project_id: str, context: ReviewContext | None, obligation_count: 
         versions = list(context.manifest["versions"]) if context else []
         current = state.get("visible_version")
         state["visible_versions"] = versions[:versions.index(current) + 1] if current in versions else []
+    # A saved 'reviewing' state cannot resume after its worker process exits.
     if state["review"]["status"] == "reviewing" and project_id not in _active:
         state["review"] = {**state["review"], "status": "interrupted",
                            "error": "Review stopped before completion. Retry to run it again."}
@@ -128,6 +131,7 @@ def _run(project_id: str, run_id: str, context: ReviewContext, obligations: list
                           "error": "Review failed for this obligation. Retry the review."}
             with _lock:
                 state = json.loads(_path(project_id).read_text(encoding="utf-8"))
+                # A reset or newer run makes this worker's result stale.
                 if state["review"]["run_id"] != run_id:
                     return
                 state["results"].append(result)
@@ -205,6 +209,8 @@ def _backfill_context(project_id: str, context: ReviewContext | None,
                if context.manifest["versions"].get(version, {}).get("filing_id") == filing_id]
     if len(lineage) < 2:
         return None
+    # Compare the first visible version with the current one so a newly added
+    # obligation sees earlier changes in this filing's lineage.
     first = lineage[0]
     ensure_backfill_comparison(context.docket_dir, first, current)
     return ReviewContext.load(ROOT / "data" / "seed" / "projects" / project_id, context.docket_dir, first, current)
@@ -243,6 +249,7 @@ def decide(project_id: str, context: ReviewContext, obligation_count: int,
                          if item["run_id"] == run_id and item["obligation_id"] == obligation_id), None)
         if previous and previous["action"] == action:
             return state
+        # Later choices append a new decision; they do not rewrite the prior one.
         state["decisions"].append({"id": str(uuid4()), "run_id": run_id,
                                    "obligation_id": obligation_id, "action": action,
                                    "actor_label": "Local manager",
@@ -261,6 +268,7 @@ def introduce(project_id: str, context: ReviewContext, obligations: list) -> dic
         if state["review"]["status"] == "reviewing":
             return state
         if state["review"]["status"] in ("failed", "partial", "interrupted") and latest:
+            # Retry the same pair and obligation scope before advancing the demo.
             pair = latest.get("comparison")
             comparison = next((item for item in context.manifest["comparisons"]
                                if item["old"] == pair["old"] and item["new"] == pair["new"]), None) if pair else context.comparison
@@ -303,6 +311,7 @@ def _begin_locked(project_id: str, state: dict, context: ReviewContext,
                                    [item.id for item in obligations]))
     if key:
         _active[project_id] = run_id
+    # The new version is visible even when no provider key can start a review.
     _write(project_id, state)
     return state, (project_id, run_id, context, obligations, key, model_name) if key else None
 

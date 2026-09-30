@@ -21,6 +21,7 @@ _lock = Lock()
 
 
 def load_manifest(docket_dir: Path) -> dict:
+    # Seed metadata stays versioned; local uploads and generated comparisons overlay it.
     manifest = json.loads((docket_dir / "manifest.json").read_text(encoding="utf-8"))
     additions = upload_dir(docket_dir) / "manifest.json"
     if additions.is_file():
@@ -55,6 +56,7 @@ def ensure_prepared_comparison(docket_dir: Path, old_version: str, new_version: 
         source_paths = []
         for version in (old_version, new_version):
             source = docket_file(docket_dir, versions[version]["file"])
+            # Refuse to generate a corpus from bytes that differ from the manifest.
             if hashlib.sha256(source.read_bytes()).hexdigest() != versions[version]["sha256"]:
                 raise ValueError("Source PDF does not match its recorded hash")
             source_paths.append(source)
@@ -83,6 +85,7 @@ def ensure_prepared_comparison(docket_dir: Path, old_version: str, new_version: 
         try:
             temporary.write_text(json.dumps(comparison_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             os.replace(temporary, output)
+            # Publish the overlay pointer only after the comparison file exists.
             manifest_tmp = uploads / f"manifest.{uuid4().hex}.tmp"
             manifest_tmp.write_text(json.dumps(additions, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
             os.replace(manifest_tmp, additions_path)
@@ -246,6 +249,7 @@ def add_revision(docket_dir: Path, old_version: str, title: str, issued_on: str,
                 "changes": compare_tokens(old_tokens, new_tokens),
             }
             comparison_path.write_text(json.dumps(comparison, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            # A revision keeps its parent's filing ID; an independent filing gets a new one.
             _publish(uploads, version, {
                 "file": f"uploads/{version}.pdf", "title": title,
                 "original_filename": original_filename,
